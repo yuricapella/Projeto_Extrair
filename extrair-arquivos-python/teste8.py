@@ -1,10 +1,16 @@
 import os
 import zipfile
 import shutil
+from dhooks import Webhook
+
+hook = Webhook("https://discord.com/api/webhooks/1196583315394789396/NSeHoScOLSsORZ3JAcuJSBdLCX8jcQm6tOENrqYzo4uUjEVyJ_QLrxbjR-voNSlcrlkW")
+
+#data=input("lalala")
+
+#hook.send("qualquer coisa")
 
 pasta_destino = "C:\\Users\\yuri_\\Downloads\\arquivospdfxml\\"
 pasta_final = "C:\\Users\\yuri_\\Downloads\\arquivosdownload\\"
-
 
 
 if not os.path.exists(pasta_final):
@@ -14,14 +20,13 @@ if not os.path.exists(pasta_destino):
     os.makedirs(pasta_destino)
 
 
-
 def processar_arquivos():
 
     for arquivo in os.listdir(pasta_destino):
-        if arquivo.endswith(".zip"):
-            print("achou o zip")
+        root, ext = os.path.splitext(arquivo)
+        if arquivo.endswith(".zip") and os.path.exists(root + ".pdf"):
+            print("achou o zip e pdf")
             print(arquivo)
-            root, ext = os.path.splitext(arquivo)
             nome_arquivo = root
             print("adicionou na lista")
             arquivo_zip = zipfile.ZipFile(os.path.join(pasta_destino, arquivo))
@@ -37,7 +42,8 @@ def processar_arquivos():
             enviar_xml(um_nome, nome_arquivo)
             enviar_pdf(nome_arquivo)
         else:
-            print("Nao achou o zip")
+            print("Nao achou o zip e pdf")
+            #hook.send("Nao achou o zip e pdf")
 
 def enviar_xml(um_nome, nome_arquivo):
     if os.path.exists(pasta_destino + um_nome):
@@ -45,6 +51,7 @@ def enviar_xml(um_nome, nome_arquivo):
         print("moveu xml")
     else:
         print("Nao achou o XML")
+        hook.send("Nao achou o XML")
 
 def enviar_pdf(nome_arquivo):
     if os.path.exists(pasta_destino + nome_arquivo + ".pdf"):       
@@ -52,6 +59,7 @@ def enviar_pdf(nome_arquivo):
         print("moveu o pdf")
     else:
         print("Nao achou o pdf")
+        hook.send("Nao achou o PDF")
 
 processar_arquivos()
 
