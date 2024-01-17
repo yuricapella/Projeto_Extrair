@@ -24,7 +24,10 @@ def processar_arquivos():
 
     for arquivo in os.listdir(pasta_destino):
         root, ext = os.path.splitext(arquivo)
-        if arquivo.endswith(".zip") and os.path.exists(root + ".pdf"):
+        print(root)
+        print(ext)
+        print(arquivo)
+        if ext == ".zip" and os.path.exists(pasta_destino + root + ".pdf"):
             print("achou o zip e pdf")
             print(arquivo)
             nome_arquivo = root
@@ -42,8 +45,9 @@ def processar_arquivos():
             enviar_xml(um_nome, nome_arquivo)
             enviar_pdf(nome_arquivo)
         else:
-            print("Nao achou o zip e pdf")
-            #hook.send("Nao achou o zip e pdf")
+            if ext == ".zip":
+                print("Nao achou o zip e pdf")
+                #hook.send("Nao achou o zip e pdf")
 
 def enviar_xml(um_nome, nome_arquivo):
     if os.path.exists(pasta_destino + um_nome):
