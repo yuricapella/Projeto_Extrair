@@ -16,7 +16,6 @@ def processar_arquivos():
     
     for arquivo in os.listdir(origin_folder):
         file_name, ext = os.path.splitext(arquivo)
-
         if ext == ".zip" and os.path.exists(f'{origin_folder}{file_name}.pdf'):
             arquivo_zip = zipfile.ZipFile(os.path.join(origin_folder, arquivo))
             arquivo_zip.extractall(origin_folder)
@@ -24,12 +23,10 @@ def processar_arquivos():
             um_nome = um_nome[0]
             arquivo_zip.close()
             os.remove(os.path.join(origin_folder, arquivo))
-
             file_count = checkIsUnique(file_name)
-
             if file_count > 0:
                 file_count += 1
-                enviar_xml(um_nome , f'{nome_arquivo}-{file_count}')
+                enviar_xml(um_nome , f'{file_name}-{file_count}')
                 enviar_pdf(file_name, f'{file_name}-{file_count}')
             else: 
                 enviar_xml(um_nome, file_name)
@@ -39,13 +36,9 @@ def processar_arquivos():
 
 def checkIsUnique(file_name):
     sameItemCount = 0
-    global nome_arquivo
     for nome_arquivo in os.listdir(destination_folder):
         if(file_name in nome_arquivo and 'xml' in nome_arquivo):
             sameItemCount += 1
-            nome_arquivo = file_name
-            print(nome_arquivo)
-
     return sameItemCount
 
 def enviar_xml(um_nome, file_name):
@@ -67,7 +60,4 @@ def enviar_pdf(um_nome, file_name = None):
     else:
         print("Nao achou o PDF")
         
-        
-    
 processar_arquivos()
-
