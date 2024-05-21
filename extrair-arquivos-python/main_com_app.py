@@ -118,23 +118,23 @@ class MainWindow(QMainWindow):
 
         # Carregar configurações antes de usar
         self.carregar_configuracoes()
-        
-        self.setWindowTitle("Extração app")
         layout = QVBoxLayout()
+        self.setWindowTitle("Extração app")
+
+
         self.extrair_title = QLabel("Extrair arquivos")
-        layout.addWidget(self.extrair_title)
+        self.extrair_hint = QLabel("Inicie o programa clicando no botão iniciar ou apertando F6")
         
         self.iniciar_button = QPushButton("Iniciar")
-        layout.addWidget(self.iniciar_button)
-        
         self.config_button = QPushButton("Configurações")
-        layout.addWidget(self.config_button)
-        
         self.logs_button = QPushButton("Logs")
-        layout.addWidget(self.logs_button)
         
-        self.extrair_hint = QLabel("Deve-se parar programa o caso for alterar as pastas")
+        layout.addWidget(self.extrair_title)
+        layout.addWidget(self.iniciar_button)
+        layout.addWidget(self.config_button)
+        layout.addWidget(self.logs_button)
         layout.addWidget(self.extrair_hint)
+        
         
         self.iniciar_button.clicked.connect(self.iniciar_button_function)
         self.config_button.clicked.connect(self.config_button_function)
@@ -154,8 +154,9 @@ class MainWindow(QMainWindow):
     
     def iniciar_button_function(self):
         if self.monitorando:
-            self.observer.stop()
-            self.observer.join()
+            if self.observer is not None:
+                self.observer.stop()
+                self.observer.join()
             self.monitorando = False
             self.iniciar_button.setText("Iniciar")
             self.logger.log_message("Monitoramento parado.")
@@ -187,7 +188,8 @@ class MainWindow(QMainWindow):
                 self.logger.log_message("Pasta de origem ou destino não selecionada.")                
 
     def logs_button_function(self):
-        self.log_dialog.exec_()
+        self.log_dialog.setWindowFlags(self.log_dialog.windowFlags() | Qt.WindowStaysOnTopHint | Qt.WindowMinimizeButtonHint)
+        self.log_dialog.show()
     
     def carregar_configuracoes(self):
         config_dialog = ConfigDialog()  # Criar uma instância de ConfigDialog
