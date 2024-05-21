@@ -9,7 +9,7 @@ Roda apenas o processamento dos arquivos.
 
 resumo: 
 
-Faz a verificação dos arquivos na pasta, se possuem o mesmo nome, pega o nome do zip e coloca no xml e após isso envia para a pasta de saída, na pasta de saída verifica se há arquivos com o mesmo nome, se houver, adiciona um contador.
+Faz a verificação dos arquivos na pasta (pdf e zip), se possuem o mesmo nome, pega o nome do zip e coloca no xml e após isso envia para a pasta de saída, na pasta de saída verifica se há arquivos com o mesmo nome, se houver, adiciona um contador.
 
 #### Já no arquivo
 ```
