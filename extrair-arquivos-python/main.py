@@ -2,8 +2,8 @@ import os
 import zipfile
 import shutil
 
-origin_folder = "C:\\Users\\yuri_\\Downloads\\arquivosbaixados\\"
-destination_folder = "C:\\Users\\yuri_\\Downloads\\arquivosmovidos\\"
+origin_folder = "caminho para a pasta de entrada"
+destination_folder = "caminho para a pasta de saída"
 
 
 if not os.path.exists(destination_folder):
