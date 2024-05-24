@@ -18,11 +18,11 @@ main_com_app.py
 Utilizei o PyQt5 e criei uma interface gráfica com botões onde inicia a verificação dos arquivos na pasta de entrada (Onde será colocado o arquivo pdf e zip) e assim que houver os dois arquivos com o mesmo nome, rodará o script de processamento dos arquivos.
 
 ### Botão de iniciar
-Pode ser clicado ou apertando a tecla f6.
+Pode ser clicado ou apertando a tecla configurada.
 
 ### Botão de configurações
-Possui dois botões para selecionar as pastas de entrada e saída
+Possui dois botões para selecionar as pastas de entrada e saída, um campo para selecionar o botão de inicialização e o botão de salvar as configurações
 
 ### Botão de logs
-Mostra o inicio e o fim do monitoramento, as pastas selecionadas e os arquivos que serão processados.
+Mostra o inicio e o fim do monitoramento, as pastas selecionadas e os arquivos que serão processados e também possui um botão para limpar logs.
 
