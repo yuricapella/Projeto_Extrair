@@ -313,8 +313,6 @@ class ConfigDialog(QDialog):
         main_layout.addWidget(self.selecionar_saida_button, 4, 0)
         main_layout.addWidget(self.salvar_button, 5, 0, 1, 3)
 
-        # Conectar o clique do QLineEdit ao método apropriado
-        #self.input_field_tecla.mousePressEvent = self.mousePressEventHandler
         self.input_field_tecla.mousePressEvent = self.mostrar_combobox
 
         # Eventos
@@ -345,7 +343,6 @@ class ConfigDialog(QDialog):
         self.selected_key = key_name
         self.combobox.hide()
      
-        
     def selecionar_pasta_entrada(self):
         pasta_entrada = QFileDialog.getExistingDirectory(self, "Selecionar Pasta de Entrada")
         if pasta_entrada:
@@ -358,7 +355,6 @@ class ConfigDialog(QDialog):
             self.output_field_pasta.setText(pasta_saida)
             self.destination_folder = pasta_saida
         
-    
     def salvar_configuracoes(self):
         origin_folder = self.input_field_pasta.text()  # Obtém o texto do campo de entrada
         destination_folder = self.output_field_pasta.text()  # Obtém o texto do campo de saída
@@ -427,8 +423,6 @@ class LogDialog(QDialog):
     def clear_logs(self):
         self.log_view.clear()
     
-        
-        
 class Logger:
     def __init__(self, log_dialog):
         self.log_dialog = log_dialog
@@ -437,12 +431,8 @@ class Logger:
         self.log_dialog.append_log(message)
         print(message)  # Também imprime no console, se necessário    
 
-            
-    
-    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-
