@@ -121,12 +121,15 @@ class MeuHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
+        
         file_name, ext = os.path.splitext(event.src_path)
-        if ext.lower() in ['.pdf', '.zip']:
+        if ext.lower() in ['.pdf', '.zip', '.xml']:
             time.sleep(2)
             pdf_file = os.path.join(self.origin_folder, f"{file_name}.pdf")
             zip_file = os.path.join(self.origin_folder, f"{file_name}.zip")
-            if os.path.exists(pdf_file) or os.path.exists(zip_file):
+            xml_file = os.path.join(self.origin_folder, f"{file_name}.xml")
+            
+            if os.path.exists(pdf_file) or os.path.exists(zip_file) or os.path.exists(xml_file):
                 self.processar_arquivos()
                 self.logger.log_message("-----------------------------------")
 
