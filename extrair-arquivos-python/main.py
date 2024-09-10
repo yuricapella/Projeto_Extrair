@@ -14,9 +14,13 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from lxml import etree
 import pdfplumber
+from pdf2image import convert_from_path
+import pytesseract
 import threading
 from unidecode import unidecode
 from queue import Queue
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
                            
 class MeuHandler(FileSystemEventHandler):
@@ -27,8 +31,27 @@ class MeuHandler(FileSystemEventHandler):
         self.process_folder = process_folder
         self.logger = logger
         self.log_dialog = log_dialog
-        self.lock = threading.Lock()
+    
+    def extract_text_with_ocr(self,file_path):
+        text = ''
         
+        try:
+            # Converte cada página do PDF em uma imagem
+            images = convert_from_path(file_path)
+            for i, image in enumerate(images):
+                # Aplicar OCR para cada página convertida em imagem
+                page_text = pytesseract.image_to_string(image)
+                #print(f"Texto extraído da página {i + 1}:\n{page_text}")
+                text += page_text + '\n'
+            
+            if not text.strip():
+                text = "Erro"
+        except Exception as e:
+            print(f"Erro ao processar o PDF com OCR: {e}")
+            text = "Erro"
+
+        return text
+       
     def extract_text_from_pdf(self, file_path):
         self.logger.log_message("-----------------------------------")
         self.logger.log_message("Iniciando a extração do nome do PDF")
@@ -39,7 +62,7 @@ class MeuHandler(FileSystemEventHandler):
                     extracted_text = page.extract_text()
                     if extracted_text:
                         text += extracted_text
-            if not text:  # Verifica se nenhuma página foi lida com sucesso
+            if not text: 
                 text = "Erro"
         except PermissionError as e:
             self.logger.log_message(f"Erro de permissão ao abrir o PDF {file_path}: {e}")
@@ -60,7 +83,7 @@ class MeuHandler(FileSystemEventHandler):
         if match:
             extracted_text = match.group(1).strip()
             normalized_name = self.normalize_name(extracted_text)
-            self.logger.log_message(f"Nome extraído do PDF: {normalized_name}")
+            #self.logger.log_message(f"Nome extraído do PDF: {normalized_name}")
             return normalized_name
         
         # Segundo padrão
@@ -69,9 +92,17 @@ class MeuHandler(FileSystemEventHandler):
         if match:
             extracted_text = match.group(1).strip()
             normalized_name = self.normalize_name(extracted_text)
-            self.logger.log_message(f"Nome extraído do PDF: {normalized_name}")
+            #self.logger.log_message(f"Nome extraído do PDF: {normalized_name}")
             return normalized_name
         
+        match = re.search(r'N°\s*(\d+)\s*Série', text)
+        
+        if match:
+            nf_number = match.group(1).strip()
+            self.logger.log_message(f"Carta sendo movida")
+            return nf_number
+            
+            
         self.logger.log_message("Nenhuma correspondência encontrada.")
         return "Erro"
         
@@ -104,7 +135,7 @@ class MeuHandler(FileSystemEventHandler):
                 if xNome_element is not None and xNome_element.text:
                     text_xml = xNome_element.text.strip()
                     normalized_name = self.normalize_name(text_xml)
-                    self.logger.log_message(f"Nome extraído do XML: {normalized_name}")
+                    #self.logger.log_message(f"Nome extraído do XML: {normalized_name}")
                     return normalized_name
             
             # Se nenhum nome for encontrado, retorna "Erro"
@@ -138,29 +169,29 @@ class MeuHandler(FileSystemEventHandler):
         for arquivo in arquivos_zip:
             zip_path = os.path.join(self.process_folder, arquivo)
             if os.path.exists(zip_path):
-                with self.lock:
-                    try:
-                        with zipfile.ZipFile(zip_path, 'r') as zip_file:
-                            self.logger.log_message(f"Extraindo o arquivo ZIP")
-                            zip_file.extractall(self.process_folder)
-                        os.remove(zip_path)
-                        self.logger.log_message(f"Arquivo ZIP removido com sucesso.")
-                    except zipfile.BadZipFile:
-                        self.logger.log_message(f"Erro ao extrair o arquivo ZIP {arquivo}: arquivo corrompido.")
-                    except OSError as e:
-                        self.logger.log_message(f"Erro ao remover o arquivo ZIP {arquivo}: {e}")
-                    except Exception as e:
-                        self.logger.log_message(f"Erro inesperado ao processar o arquivo ZIP {arquivo}: {e}")
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zip_file:
+                        self.logger.log_message(f"Extraindo o arquivo ZIP")
+                        zip_file.extractall(self.process_folder)
+                    os.remove(zip_path)
+                    self.logger.log_message(f"Arquivo ZIP removido com sucesso.")
+                except zipfile.BadZipFile:
+                    self.logger.log_message(f"Erro ao extrair o arquivo ZIP {arquivo}: arquivo corrompido.")
+                except OSError as e:
+                    self.logger.log_message(f"Erro ao remover o arquivo ZIP {arquivo}: {e}")
+                except Exception as e:
+                    self.logger.log_message(f"Erro inesperado ao processar o arquivo ZIP {arquivo}: {e}")
             else:
                 self.logger.log_message(f"O arquivo ZIP {arquivo} já foi removido.")
 
     def processar_arquivos_extraidos(self):
         arquivos_processados = False
-        tentativas_maximas = 5  # Número máximo de tentativas para processar arquivos
+        tentativas_maximas = 1  # Número máximo de tentativas para processar arquivos
         tentativas = 0
         arquivos_removidos = []
 
         while tentativas < tentativas_maximas:
+            # Listando arquivos XML e PDF na pasta de processamento
             arquivos_xml = [f for f in os.listdir(self.process_folder) if f.endswith('.xml')]
             arquivos_pdf = [f for f in os.listdir(self.process_folder) if f.endswith('.pdf')]
 
@@ -179,7 +210,7 @@ class MeuHandler(FileSystemEventHandler):
                         chave = xml_file.split('-nfe.xml')[0]  # Ajusta para chave base
                         xml_por_nome[chave] = (xml_path, nome_xml)
                         if nome_xml != "Erro":
-                            self.logger.log_message(f"XML coletado")
+                            self.logger.log_message(f"XML coletado: {xml_file}\n nome extraído: {nome_xml}")
                             self.logger.log_message("-----------------------------------")
                         else:
                             self.logger.log_message(f"XML corrompido ou fora do padrão: {xml_file}")
@@ -194,21 +225,25 @@ class MeuHandler(FileSystemEventHandler):
                         chave = pdf_file.replace('.pdf', '')  # Ajusta para chave base
                         pdf_por_nome[chave] = (pdf_path, nome_pdf)
                         if nome_pdf != "Erro":
-                            self.logger.log_message(f"PDF coletado")
+                            self.logger.log_message(f"PDF coletado: {pdf_file}\n nome extraído: {nome_pdf}")
                             self.logger.log_message("-----------------------------------")
                         else:
                             self.logger.log_message(f"PDF corrompido ou fora do padrão: {pdf_file}")
                             self.logger.log_message("-----------------------------------")
+                    else:
+                        self.logger.log_message(f"Caminho do PDF não encontrado: {pdf_path}")
 
                 # Processa e renomeia arquivos
                 for chave in xml_por_nome.keys():
                     if chave in pdf_por_nome:
-                        # Extraímos corretamente os valores individuais da tupla
                         xml_path, nome_xml = xml_por_nome[chave]
                         pdf_path, nome_pdf = pdf_por_nome[chave]
 
                         if nome_xml != "Erro" and nome_pdf != "Erro":
                             # Verifica a unicidade e ajusta o nome se necessário
+                            self.logger.log_message("-----------------------------------")
+                            self.logger.log_message(f"Renomeando e movendo arquivos")
+
                             count_xml = self.checkIsUnique(nome_xml, '.xml')
                             count_pdf = self.checkIsUnique(nome_pdf, '.pdf')
 
@@ -250,23 +285,26 @@ class MeuHandler(FileSystemEventHandler):
                                     if os.path.exists(xml_path):
                                         os.remove(xml_path)
                                         arquivos_removidos.append(nome_xml)
-            else:
-                # Se não há arquivos XML ou PDF, não define pares_encontrados
-                pares_encontrados = False
+                else:
+                    self.logger.log_message("Nenhum par de arquivos XML e PDF encontrado.")
 
             time.sleep(1)
+            
             if pares_encontrados:
-                self.logger.log_message(f"Arquivos processados")
+                self.logger.log_message("Arquivos processados com sucesso.")
                 arquivos_processados = True
                 break
-
+            else:
+                self.logger.log_message("Nenhum par processado")
+                
             tentativas += 1
+
         if arquivos_removidos:
             self.logger.log_message(f"Arquivos removidos: {arquivos_removidos}")
+
         return arquivos_processados
 
     def mover_arquivos_para_process(self):
-        with self.lock:
             for arquivo in os.listdir(self.origin_folder):
                 nome_arquivo, extensao = os.path.splitext(arquivo)
                 origin_path = os.path.join(self.origin_folder, arquivo)
@@ -276,8 +314,16 @@ class MeuHandler(FileSystemEventHandler):
                 if os.path.exists(origin_path):
                     if extensao in (".xml", ".zip", ".pdf") and "file" not in nome_arquivo.lower():
                     # Verifica se o nome do arquivo contém "carta de correcao" ou "carta de correção"
-                        if "carta de correcao" in nome_arquivo.lower() or "carta de correção" in nome_arquivo.lower():
+                        if "carta de correcao" in nome_arquivo.lower() or "carta de correção" in nome_arquivo.lower() or "c" in nome_arquivo.lower() or "carta" in nome_arquivo.lower() or "Bling - Cartas de correção" in nome_arquivo.lower():
                             try:
+                                conteudo_pdf = self.extract_text_with_ocr(origin_path)
+                                
+                                nome_pdf = self.extract_name_from_text(conteudo_pdf)
+                                
+                                arquivo = f"Carta de correção - {nome_pdf}{extensao}"
+                                
+                                destino_path = os.path.join(self.destination_folder, arquivo)
+                                
                                 shutil.move(origin_path, destino_path)
                                 self.logger.log_message(f"Arquivo movido para pasta de destino: {arquivo}")
                             except shutil.Error as e:
@@ -371,20 +417,28 @@ class KeyListener(QThread):
     def on_press(self, key):
         try:
             if key in self.key_map:
-                # Emitir o sinal com o valor da tecla
+                print(f"Tecla pressionada: {self.key_map[key]}")  # Verifica a tecla pressionada
                 self.keyPressed.emit(self.key_map[key])
         except AttributeError:
             pass
     
 class MainWindow(QMainWindow):
+    _instance = None
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(MainWindow, cls).__new__(cls, *args, **kwargs)
+        return cls._instance
+    
     def __init__(self):
         super().__init__()
+
         self.config_dialog = ConfigDialog()
         self.config_dialog.config_saved.connect(self.carregar_configuracoes_MainWindow)
         
         # Start logs
         self.log_dialog = LogDialog()
         self.logger = Logger(self.log_dialog)
+        
         
         self.logger.log_message("Aplicação iniciada")
         
@@ -395,13 +449,15 @@ class MainWindow(QMainWindow):
         self.process_folder = None
         self.inicialization_key = None
 
-
+        #Abrir janela
+        self.initialize_ui()
         # Carregar configurações antes de usar
         self.carregar_configuracoes_MainWindow()
         
-        
+    def initialize_ui(self):
         main_layout = QVBoxLayout()
         sub_layout = QHBoxLayout()
+        
         self.setWindowTitle("Extração app")
 
         #Botões
@@ -428,8 +484,10 @@ class MainWindow(QMainWindow):
 
         # Iniciar key listener thread
         self.key_listener = KeyListener()
-        self.key_listener.keyPressed.connect(self.on_key)
+        self.key_listener.keyPressed.connect(self.saved_key)
         self.key_listener.start()
+        
+        self.initialized = True
         
     def fechar_todas_as_janelas(self):
         print("Fechando todas as janelas...")
@@ -454,7 +512,7 @@ class MainWindow(QMainWindow):
             self.parar_monitoramento()
             self.monitorando = False
             self.iniciar_button.setText("Iniciar")
-            
+
             if hasattr(self, 'processing_thread') and self.processing_thread.is_alive():
                 self.processing_thread.join()
             self.logger.log_message("Monitoramento parado.")
@@ -466,7 +524,10 @@ class MainWindow(QMainWindow):
                 self.iniciar_button.setText("Parar")
                 self.logger.log_message("Monitoramento iniciado.")
                 self.logger.log_message("-----------------------------------")
-                self.meu_handler.processar_arquivos()
+                
+                if not hasattr(self, 'processing_thread') or not self.processing_thread.is_alive():
+                    self.processing_thread = threading.Thread(target=self.meu_handler.processar_arquivos)
+                    self.processing_thread.start()
             except Exception as e:
                 self.logger.log_message(f"Erro ao iniciar monitoramento: {e}")
     
@@ -505,17 +566,17 @@ class MainWindow(QMainWindow):
                     self.logger.log_message("Pasta de origem ou destino não selecionada.")
                     
     def logs_button_function(self):
-        if hasattr(self, 'log_dialog_instance') and self.log_dialog_instance is not None:
-            if self.log_dialog_instance.isVisible():
-                print("LogDialog já visível.")
-                self.log_dialog_instance.raise_()
-                self.log_dialog_instance.activateWindow()
-                return
+        if self.log_dialog is not None and self.log_dialog.isVisible():
+            print("LogDialog já visível.")
+            self.log_dialog.raise_()
+            self.log_dialog.activateWindow()
+        else:
+            if self.log_dialog is None:
+                self.log_dialog = LogDialog()
+                self.logger = Logger(self.log_dialog)  # Certifique-se de que a instância de logger use essa janela
+            self.log_dialog.setWindowFlags(self.log_dialog.windowFlags() | Qt.WindowStaysOnTopHint | Qt.WindowMinimizeButtonHint)
+            self.log_dialog.show()
         
-        self.log_dialog_instance = LogDialog()
-        self.log_dialog.setWindowFlags(self.log_dialog.windowFlags() | Qt.WindowStaysOnTopHint | Qt.WindowMinimizeButtonHint)
-        self.log_dialog.show()
-    
     def carregar_configuracoes_MainWindow(self):
         config_dialog = ConfigDialog()  # Criar uma instância de ConfigDialog
         config_dialog.carregar_configuracoes_ConfigDialog()  # Carregar configurações antes de usar
@@ -528,8 +589,6 @@ class MainWindow(QMainWindow):
             self.destination_folder = destination_folder
             self.process_folder = process_folder
             self.inicialization_key = inicialization_key
-            self.log_dialog = LogDialog()
-            self.logger = Logger(self.log_dialog)
             
             # Inicialize MeuHandler após definir as variáveis
             self.meu_handler = MeuHandler(
@@ -571,10 +630,32 @@ class MainWindow(QMainWindow):
         else:
             self.logger.log_message("Pasta de origem ou destino não selecionada. Não é possível iniciar o monitoramento.")
 
-    def on_key(self, key):
+    def saved_key(self, key):
         inicialization_key = self.inicialization_key
         if key == inicialization_key:
             self.iniciar_button_function()
+        
+        #print(f"Chave detectada: {key}")
+        if key == "F8":
+            if hasattr(self, 'log_dialog') and self.log_dialog is not None:
+                if self.log_dialog.isVisible():
+                    self.close_log_dialog()  # Fechar a janela de logs
+                else:
+                    self.logs_button_function()  # Abrir a janela de logs
+            else:
+                self.logs_button_function()  # Abrir a janela de logs
+    
+    def handle_log_window_closed(self):
+        # Limpar a referência quando a janela de log for fechada
+        self.log_dialog = None
+        print("LogDialog fechado.")
+        
+    def close_log_dialog(self):
+        if self.log_dialog and self.log_dialog.isVisible():
+            print("Fechando LogDialog.")
+            self.log_dialog.close()  # Solicitar o fechamento da janela
+        else:
+            print("LogDialog não está visível.")
             
 class ConfigDialog(QDialog):
     
@@ -582,12 +663,16 @@ class ConfigDialog(QDialog):
     
     def __init__(self):
         super().__init__()
-        self.origin_folder = None  # Definindo como variável de classe
-        self.destination_folder = None  # Definindo como variável de classe
+        self.origin_folder = None
+        self.destination_folder = None
         self.inicialization_key = None
         
         self.key_listener = KeyListener()
+        self.log_dialog = LogDialog()
+        self.logger = Logger(self.log_dialog)
+        self.config_ui()
         
+    def config_ui(self):
         main_layout = QGridLayout()
         
         self.combobox = QComboBox(self)
@@ -690,6 +775,7 @@ class ConfigDialog(QDialog):
             self.process_folder = pasta_process
         
     def salvar_configuracoes(self):
+        
         origin_folder = self.input_field_pasta.text()
         destination_folder = self.output_field_pasta.text()
         process_folder = self.process_field_pasta.text()
@@ -711,6 +797,7 @@ class ConfigDialog(QDialog):
         self.process_folder = process_folder
         self.inicialization_key = inicialization_key
         self.config_saved.emit()
+        self.logger.log_message("Configurações salvas com sucesso.")
         self.close()  # Fecha o diálogo
         
     def carregar_configuracoes_ConfigDialog(self):
@@ -744,6 +831,7 @@ class ConfigDialog(QDialog):
         return self.input_field_tecla.text()
     
 class LogDialog(QDialog):
+    closed = pyqtSignal()
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Logs")
@@ -759,6 +847,8 @@ class LogDialog(QDialog):
         self.main_layout.addWidget(self.clear_button)
         
         self.clear_button.clicked.connect(self.clear_logs)
+        
+        self.setLayout(self.main_layout)
 
     def append_log(self, message):
         self.log_view.append(message)
@@ -767,10 +857,13 @@ class LogDialog(QDialog):
     def clear_logs(self):
         self.log_view.clear()
         
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        self.closed.emit()
+        
     
 class Logger(QObject):
     new_log_message = pyqtSignal(str)
-    
     
     def __init__(self, log_dialog):
         super().__init__()
@@ -779,8 +872,8 @@ class Logger(QObject):
 
     def log_message(self, message):
         self.new_log_message.emit(message)
-        print(message)  # Também imprime no console, se necessário    
-
+        print(message)  # Também imprime no console, se necessário   
+        
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
