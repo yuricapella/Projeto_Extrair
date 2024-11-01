@@ -36,30 +36,21 @@ for i, cadastro in enumerate(cadastros, start=1):
     # print(f"cadastro: {cadastro}")
     cadastro_parts = cadastro.strip().split('\n')
     print(f"cadastro_parts: {cadastro_parts}")
-    match = re.search(r'^(.*?)-', cadastro_parts[1])
+    
+    match = re.search(r'^(.*?) - CPF (\d+)', cadastro_parts[1])
     if match:
         NOME = match.group(1)
-
-    match = re.search(r'CPF (\d+)', cadastro_parts[1])
-    if match:
-        CPF_CNPJ = match.group(1)
+        CPF_CNPJ = match.group(2)
     
-    match = re.search(r'CEP:(.*?),', cadastro_parts[2])
-    if match:
-        CEP = match.group(1).strip()
-    
-    match = re.search(r',(.*?)- CEP:', cadastro_parts[2])
-    if match:
-        CIDADE = match.group(1).strip()
-    
-    match = re.search(r'- CEP:(.*?),(.*?)$', cadastro_parts[2])
-    if match:
-        ESTADO = match.group(2).strip()
-        SIGLA_ESTADO = estados.get(ESTADO)
-    
-    match = re.search(r'^(.*?)(\d+)', cadastro_parts[2])
+    match = re.search(r'^(.*?)(\d+)(.*?),(.*?)- CEP:(.*?),(.*?)$', cadastro_parts[2])
     if match:
         RUA = match.group(1).strip()
+        NUMERO = match.group(2).strip()
+        CIDADE = match.group(4).strip()
+        CEP = match.group(5).strip()
+        ESTADO = match.group(6).strip()
+        SIGLA_ESTADO = estados.get(ESTADO)
+        
     
     print(NOME)
     print(CPF_CNPJ)
@@ -68,7 +59,6 @@ for i, cadastro in enumerate(cadastros, start=1):
     print(SIGLA_ESTADO)
     print(RUA)
     print(NUMERO)
-    print(COMPLEMENTO)
     print(PRODUTO)
     print(UN)
     print(QUANTIDADE)
@@ -91,7 +81,6 @@ for i, cadastro in enumerate(cadastros, start=1):
         "bairro": BAIRRO,
         "rua": RUA,
         "numero": NUMERO,
-        "complemento": COMPLEMENTO,
         "produto": PRODUTO,
         "un": UN,
         "quantidade": QUANTIDADE,
