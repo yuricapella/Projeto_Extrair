@@ -110,13 +110,10 @@ class MeuHandler(FileSystemEventHandler):
         # Remove acentuação
         name = unidecode(name)
         
-        # Substitui pontos por espaços
         name = re.sub(r'\.', ' ', name)
         
-        # Mantém apenas letras, números, espaços e os caracteres especiais permitidos (&)
         name = re.sub(r'[^A-Za-z0-9\s&]', '', name)
         
-        # Remove espaços extras
         name = re.sub(r'\s+', ' ', name).strip()
         
         return name
@@ -138,7 +135,6 @@ class MeuHandler(FileSystemEventHandler):
                     #self.logger.log_message(f"Nome extraído do XML: {normalized_name}")
                     return normalized_name
             
-            # Se nenhum nome for encontrado, retorna "Erro"
             self.logger.log_message(f"Nenhum nome encontrado no XML {file_path}")
             return "Erro"
         
@@ -191,18 +187,15 @@ class MeuHandler(FileSystemEventHandler):
         arquivos_removidos = []
 
         while tentativas < tentativas_maximas:
-            # Listando arquivos XML e PDF na pasta de processamento
             arquivos_xml = [f for f in os.listdir(self.process_folder) if f.endswith('.xml')]
             arquivos_pdf = [f for f in os.listdir(self.process_folder) if f.endswith('.pdf')]
 
-            # Dicionários para armazenar arquivos por nome sequencial
             xml_por_nome = {}
             pdf_por_nome = {}
             
             pares_encontrados = False
             
             if arquivos_xml and arquivos_pdf:
-                # Coleta arquivos XML
                 for xml_file in arquivos_xml:
                     xml_path = os.path.join(self.process_folder, xml_file)
                     if os.path.exists(xml_path):
@@ -216,7 +209,6 @@ class MeuHandler(FileSystemEventHandler):
                             self.logger.log_message(f"XML corrompido ou fora do padrão: {xml_file}")
                             self.logger.log_message("-----------------------------------")
 
-                # Coleta arquivos PDF
                 for pdf_file in arquivos_pdf:
                     pdf_path = os.path.join(self.process_folder, pdf_file)
                     if os.path.exists(pdf_path):
@@ -305,40 +297,41 @@ class MeuHandler(FileSystemEventHandler):
         return arquivos_processados
 
     def mover_arquivos_para_process(self):
-            for arquivo in os.listdir(self.origin_folder):
-                nome_arquivo, extensao = os.path.splitext(arquivo)
-                origin_path = os.path.join(self.origin_folder, arquivo)
-                process_path = os.path.join(self.process_folder, arquivo)
-                destino_path = os.path.join(self.destination_folder, arquivo)
-                
-                if os.path.exists(origin_path):
-                    if extensao in (".xml", ".zip", ".pdf") and "file" not in nome_arquivo.lower():
-                    # Verifica se o nome do arquivo contém "carta de correcao" ou "carta de correção"
-                        if "carta de correcao" in nome_arquivo.lower() or "carta de correção" in nome_arquivo.lower() or "c" in nome_arquivo.lower() or "carta" in nome_arquivo.lower() or "Bling - Cartas de correção" in nome_arquivo.lower():
-                            try:
-                                conteudo_pdf = self.extract_text_with_ocr(origin_path)
-                                
-                                nome_pdf = self.extract_name_from_text(conteudo_pdf)
-                                
-                                arquivo = f"Carta de correção - {nome_pdf}{extensao}"
-                                
-                                destino_path = os.path.join(self.destination_folder, arquivo)
-                                
-                                shutil.move(origin_path, destino_path)
-                                self.logger.log_message(f"Arquivo movido para pasta de destino: {arquivo}")
-                            except shutil.Error as e:
-                                self.logger.log_message(f"Erro ao mover arquivo para destino: {e}")
-                            except OSError as e:
-                                self.logger.log_message(f"Erro do sistema operacional ao mover arquivo para destino: {e}")
+        for arquivo in os.listdir(self.origin_folder):
+            nome_arquivo, extensao = os.path.splitext(arquivo)
+            origin_path = os.path.join(self.origin_folder, arquivo)
+            process_path = os.path.join(self.process_folder, arquivo)
+            destino_path = os.path.join(self.destination_folder, arquivo)
+
+            if not os.path.exists(origin_path):
+                self.logger.log_message(f"Arquivo não encontrado: {origin_path}")
+                continue
+
+            if extensao in (".xml", ".zip", ".pdf") and "file" not in nome_arquivo.lower():
+                if any(term in nome_arquivo.lower() for term in [
+                    "carta de correcao", "carta de correção", "c", "carta", "bling - cartas de correção"]):
+                    try:
+                        conteudo_pdf = self.extract_text_with_ocr(origin_path)
+                        nome_pdf = self.extract_name_from_text(conteudo_pdf)
+                        arquivo = f"Carta de correção - {nome_pdf}{extensao}"
+                        destino_path = os.path.join(self.destination_folder, arquivo)
+
+                        if not os.path.exists(destino_path):
+                            shutil.move(origin_path, destino_path)
+                            self.logger.log_message(f"Arquivo movido para pasta de destino: {arquivo}")
                         else:
-                            if os.path.exists(origin_path) and not os.path.exists(process_path):
-                                try:
-                                    shutil.move(origin_path, process_path)
-                                    self.logger.log_message(f"Arquivo movido para pasta process: {arquivo}")
-                                except shutil.Error as e:
-                                    self.logger.log_message(f"Erro ao mover arquivo para pasta process: {e}")
-                                except OSError as e:
-                                    self.logger.log_message(f"Erro do sistema operacional ao mover arquivo para pasta process: {e}")
+                            self.logger.log_message(f"Arquivo já existe no destino: {arquivo}")
+                    except Exception as e:
+                        self.logger.log_message(f"Erro ao processar arquivo: {arquivo}, {e}")
+                else:
+                    try:
+                        if not os.path.exists(process_path):
+                            shutil.move(origin_path, process_path)
+                            self.logger.log_message(f"Arquivo movido para pasta process: {arquivo}")
+                        else:
+                            self.logger.log_message(f"Arquivo já existe na pasta process: {arquivo}")
+                    except Exception as e:
+                        self.logger.log_message(f"Erro ao mover arquivo para pasta process: {arquivo}, {e}")
 
     def checkIsUnique(self, file_name, file_type):
         sameItemCount = 0
