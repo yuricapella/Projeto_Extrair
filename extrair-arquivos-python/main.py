@@ -5,20 +5,24 @@ import zipfile
 import shutil
 import json
 import re
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QWidget,QDialog, 
-                            QLineEdit, QFileDialog, QTextEdit, QComboBox)
+import subprocess
+import threading
+from unidecode import unidecode
+from queue import Queue
 
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPoint, QObject
-from pynput import keyboard
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QWidget,QDialog, 
+                            QLineEdit, QFileDialog, QTextEdit, QComboBox, QMessageBox)
+
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPoint, QObject, QTimer
+from pynput import keyboard
+
 from lxml import etree
 import pdfplumber
 from pdf2image import convert_from_path
 import pytesseract
-import threading
-from unidecode import unidecode
-from queue import Queue
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -305,40 +309,41 @@ class MeuHandler(FileSystemEventHandler):
         return arquivos_processados
 
     def mover_arquivos_para_process(self):
-            for arquivo in os.listdir(self.origin_folder):
-                nome_arquivo, extensao = os.path.splitext(arquivo)
-                origin_path = os.path.join(self.origin_folder, arquivo)
-                process_path = os.path.join(self.process_folder, arquivo)
-                destino_path = os.path.join(self.destination_folder, arquivo)
-                
-                if os.path.exists(origin_path):
-                    if extensao in (".xml", ".zip", ".pdf") and "file" not in nome_arquivo.lower():
-                    # Verifica se o nome do arquivo contém "carta de correcao" ou "carta de correção"
-                        if "carta de correcao" in nome_arquivo.lower() or "carta de correção" in nome_arquivo.lower() or "c" in nome_arquivo.lower() or "carta" in nome_arquivo.lower() or "Bling - Cartas de correção" in nome_arquivo.lower():
-                            try:
-                                conteudo_pdf = self.extract_text_with_ocr(origin_path)
-                                
-                                nome_pdf = self.extract_name_from_text(conteudo_pdf)
-                                
-                                arquivo = f"Carta de correção - {nome_pdf}{extensao}"
-                                
-                                destino_path = os.path.join(self.destination_folder, arquivo)
-                                
-                                shutil.move(origin_path, destino_path)
-                                self.logger.log_message(f"Arquivo movido para pasta de destino: {arquivo}")
-                            except shutil.Error as e:
-                                self.logger.log_message(f"Erro ao mover arquivo para destino: {e}")
-                            except OSError as e:
-                                self.logger.log_message(f"Erro do sistema operacional ao mover arquivo para destino: {e}")
+        for arquivo in os.listdir(self.origin_folder):
+            nome_arquivo, extensao = os.path.splitext(arquivo)
+            origin_path = os.path.join(self.origin_folder, arquivo)
+            process_path = os.path.join(self.process_folder, arquivo)
+            destino_path = os.path.join(self.destination_folder, arquivo)
+
+            if not os.path.exists(origin_path):
+                self.logger.log_message(f"Arquivo não encontrado: {origin_path}")
+                continue
+
+            if extensao in (".xml", ".zip", ".pdf") and "file" not in nome_arquivo.lower():
+                if any(term in nome_arquivo.lower() for term in [
+                    "carta de correcao", "carta de correção", "c", "carta", "bling - cartas de correção"]):
+                    try:
+                        conteudo_pdf = self.extract_text_with_ocr(origin_path)
+                        nome_pdf = self.extract_name_from_text(conteudo_pdf)
+                        arquivo = f"Carta de correção - {nome_pdf}{extensao}"
+                        destino_path = os.path.join(self.destination_folder, arquivo)
+
+                        if not os.path.exists(destino_path):
+                            shutil.move(origin_path, destino_path)
+                            self.logger.log_message(f"Arquivo movido para pasta de destino: {arquivo}")
                         else:
-                            if os.path.exists(origin_path) and not os.path.exists(process_path):
-                                try:
-                                    shutil.move(origin_path, process_path)
-                                    self.logger.log_message(f"Arquivo movido para pasta process: {arquivo}")
-                                except shutil.Error as e:
-                                    self.logger.log_message(f"Erro ao mover arquivo para pasta process: {e}")
-                                except OSError as e:
-                                    self.logger.log_message(f"Erro do sistema operacional ao mover arquivo para pasta process: {e}")
+                            self.logger.log_message(f"Arquivo já existe no destino: {arquivo}")
+                    except Exception as e:
+                        self.logger.log_message(f"Erro ao processar arquivo: {arquivo}, {e}")
+                else:
+                    try:
+                        if not os.path.exists(process_path):
+                            shutil.move(origin_path, process_path)
+                            self.logger.log_message(f"Arquivo movido para pasta process: {arquivo}")
+                        else:
+                            self.logger.log_message(f"Arquivo já existe na pasta process: {arquivo}")
+                    except Exception as e:
+                        self.logger.log_message(f"Erro ao mover arquivo para pasta process: {arquivo}, {e}")
 
     def checkIsUnique(self, file_name, file_type):
         sameItemCount = 0
@@ -464,17 +469,20 @@ class MainWindow(QMainWindow):
         self.iniciar_button = QPushButton("Iniciar")
         self.config_button = QPushButton("Configurações")
         self.logs_button = QPushButton("Logs")
+        self.cadastrar_nota_button = QPushButton("Cadastrar Nota")
         
         #Widgets
         main_layout.addWidget(self.iniciar_button)
         sub_layout.addWidget(self.config_button)
         sub_layout.addWidget(self.logs_button)
+        main_layout.addWidget(self.cadastrar_nota_button)
         main_layout.addLayout(sub_layout)
         
         #Eventos
         self.iniciar_button.clicked.connect(self.iniciar_button_function)
         self.config_button.clicked.connect(self.config_button_function)
         self.logs_button.clicked.connect(self.logs_button_function)
+        self.cadastrar_nota_button.clicked.connect(self.abrir_cadastrar_nota)
         
         # Principal
         central_widget = QWidget()
@@ -576,7 +584,11 @@ class MainWindow(QMainWindow):
                 self.logger = Logger(self.log_dialog)  # Certifique-se de que a instância de logger use essa janela
             self.log_dialog.setWindowFlags(self.log_dialog.windowFlags() | Qt.WindowStaysOnTopHint | Qt.WindowMinimizeButtonHint)
             self.log_dialog.show()
-        
+    
+    def abrir_cadastrar_nota(self):
+        self.cadastrar_nota_dialog = CadastrarNota()
+        self.cadastrar_nota_dialog.exec_()
+      
     def carregar_configuracoes_MainWindow(self):
         config_dialog = ConfigDialog()  # Criar uma instância de ConfigDialog
         config_dialog.carregar_configuracoes_ConfigDialog()  # Carregar configurações antes de usar
@@ -656,7 +668,229 @@ class MainWindow(QMainWindow):
             self.log_dialog.close()  # Solicitar o fechamento da janela
         else:
             print("LogDialog não está visível.")
+
+class CadastrarNota(QDialog):
+    
+    def __init__(self, config_file="cadastro.json"):
+        super().__init__()
+        self.config_file = config_file
+        self.username = "" 
+        self.password = ""
+        self.cadastro_file = None  # Arquivo de cadastro selecionado
+        self.init_ui()
+        
+    def init_ui(self):
+        main_layout = QVBoxLayout()
+        
+        self.message_label = QLabel("")
+        
+        self.title_label = QLabel("Cadastrar Novo Cliente")
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.username_input.setText(self.username)
+        
+        password_layout = QHBoxLayout()
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setText(self.password)
+
+        self.toggle_password_button = QPushButton("Mostrar")
+        self.toggle_password_button.setCheckable(True)
+        self.toggle_password_button.clicked.connect(self.toggle_password_visibility)
+
+        password_layout.addWidget(self.password_input)
+        password_layout.addWidget(self.toggle_password_button)
+        self.texto_padrao = (
+            "PRIMEIRO PADRAO\n\n"
+            "NOME: Nome Completo\n"
+            "CPF: CPF\n"
+            "ENDEREÇO: Rua Número - Complemento\n"
+            "CEP: 00000000\n"
+            "ESTADO: Estado\n"
+            "CIDADE: Cidade\n"
+            "UF: UF\n"
+            "PRODUTO: Descrição do Produto\n"
+            "QUANTIDADE: Quantidade\n"
+            "VALOR OU VALOR UNITARIO: R$Valor Unitário\n"
+            "NCM: Código NCM\n"
+            "UN: Tipo Unidade\n"
+            "-------------------\n"
+            "SEGUNDO PADRAO\n\n"
+            "NOME: Nome Completo\n"
+            "CNPJ: CNPJ ou CNPJ: CNPJ (ISENTO) / (CONTRIBUINTE)\n"
+            "INSCRIÇÃO ESTADUAL: IE / ISENTO / SEM ESSA LINHA TAMBÉM FICA ISENTO\n"
+            "ENDEREÇO: Rua Nome, Número - Complemento\n"
+            "CEP: 00000000\n"
+            "ESTADO: Estado\n"
+            "CIDADE: Cidade\n"
+            "UF: UF\n"
+            "PRODUTO: Descrição do Produto\n"
+            "QUANTIDADE: Quantidade\n"
+            "VALOR OU VALOR UNITARIO: R$Valor Unitário\n"
+            "NCM: Código NCM\n"
+            "UN: Tipo Unidade"
+            )
+
+        self.cadastrar_nota_text = QTextEdit(self)
+        self.cadastrar_nota_text.setPlaceholderText(
+            self.texto_padrao
+        )
+        
+        
+        self.btn_sp = QPushButton("Cadastro SP")
+        self.btn_sp.clicked.connect(lambda: self.load_file("SP"))
+        self.btn_ms = QPushButton("Cadastro MS")
+        self.btn_ms.clicked.connect(lambda: self.load_file("MS"))
+
+        self.cadastrar_nota_button = QPushButton("Cadastrar Nota")
+        self.cadastrar_nota_button.clicked.connect(self.salvar_cliente)
+        
+        self.exemplo_button = QPushButton("Exemplo de cadastro")
+        self.exemplo_button.clicked.connect(self.exibir_exemplo)
+
+        main_layout.addWidget(self.title_label)
+        main_layout.addWidget(self.username_input)
+        main_layout.addLayout(password_layout)
+        main_layout.addWidget(self.btn_sp)
+        main_layout.addWidget(self.btn_ms)
+        main_layout.addWidget(self.message_label)
+        main_layout.addWidget(self.cadastrar_nota_text)
+        
+
+        main_layout.addWidget(self.cadastrar_nota_button)
+        main_layout.addWidget(self.exemplo_button)
+
+        self.setLayout(main_layout)
+        self.setWindowTitle("Cadastrar Nota")
+
+    def load_credentials(self):
+        if not os.path.exists(self.cadastro_file):
+            self.create_default_credentials()
+        else:
+            try:
+                with open(self.cadastro_file, "r") as f:
+                    config_data = json.load(f)
+                    self.username = config_data.get("username", "")
+                    self.password = config_data.get("password", "")
+                    self.cadastro = config_data.get("cadastro", "")
+                    
+                    self.username_input.setText(self.username)
+                    self.password_input.setText(self.password)
+                    self.cadastrar_nota_text.setText(self.cadastro)
+                    
+            except json.JSONDecodeError:
+                print("Erro ao decodificar o arquivo JSON.")
+                self.create_default_credentials()
+                
+                
+    def load_file(self, tipo):
+        pasta_cadastro = "cadastro"
+    
+        if tipo == "SP":
+            self.cadastro_file = os.path.join(pasta_cadastro, "cadastro_sp.json")
+        elif tipo == "MS":
+            self.cadastro_file = os.path.join(pasta_cadastro, "cadastro_ms.json")
             
+        self.load_credentials()    
+        
+        self.show_message(f"Arquivo de cadastro selecionado: {self.cadastro_file}")
+    
+      
+    def create_default_credentials(self):
+        default_data = {
+            "username": "",
+            "password": "",
+            "cadastro": ""
+        }
+        with open (self.cadastro_file, "w") as f:
+            json.dump(default_data, f)
+        print(f"Arquivo {self.cadastro_file} criado com sucesso.")
+
+    def toggle_password_visibility(self):
+        if self.toggle_password_button.isChecked():
+            self.password_input.setEchoMode(QLineEdit.Normal)
+            self.toggle_password_button.setText("Ocultar")
+        else:
+            self.password_input.setEchoMode(QLineEdit.Password)
+            self.toggle_password_button.setText("Mostrar")
+            
+    def show_message(self, message):
+        self.message_label.setText(message)
+        self.message_label.setStyleSheet("color: green;")
+        self.message_label.show()
+
+        QTimer.singleShot(1000, self.hide_message)
+        
+    def show_message_error(self, message):
+        self.message_label.setText(message)
+        self.message_label.setStyleSheet("color: red;")
+        self.message_label.show()
+    
+        QTimer.singleShot(1000, self.hide_message)
+        
+    def hide_message(self):
+        self.message_label.hide()
+        
+    def exibir_exemplo(self):
+        exemplo_dialog = QDialog(self)
+        exemplo_dialog.setWindowTitle("Exemplo de cadastro")
+
+        exemplo_layout = QVBoxLayout()
+        
+        exemplo_text = QTextEdit(exemplo_dialog)
+        exemplo_text.setPlainText(
+            self.texto_padrao
+        )
+        exemplo_text.setReadOnly(True)
+        exemplo_layout.addWidget(exemplo_text)
+
+        exemplo_dialog.setLayout(exemplo_layout)
+        exemplo_dialog.setModal(False)
+        exemplo_dialog.move(self.geometry().right(), self.geometry().top())
+        exemplo_dialog.show()
+    
+
+    def salvar_cliente(self):
+        if not self.cadastro_file:
+            self.show_message_error("Selecione um tipo de cadastro antes de salvar.")
+            return
+
+        username = self.username_input.text()
+        password = self.password_input.text()
+        cadastro = self.cadastrar_nota_text.toPlainText()
+
+        cadastro_data = {
+            "username": username,
+            "password": password,
+            "cadastro": cadastro
+        }
+
+        with open(self.cadastro_file, "w") as f:
+            json.dump(cadastro_data, f, indent=4)
+
+        self.show_message(f"Dados salvos em {self.cadastro_file}")
+        self.ativar_robo()
+        
+        
+    def ativar_robo(self):
+        match = re.search(r'_(\w+)\.json$', self.cadastro_file)
+        if match:
+            tipo = match.group(1)
+            pasta_cadastro = "cadastro/"
+            variaveis_file = f"{pasta_cadastro}variaveis_{tipo}.py"
+
+            process = subprocess.Popen(["robot", "--variablefile", variaveis_file, "cadastro/cadastrar_nota.robot"])
+
+            try:
+                process.wait()
+                self.show_message("Processo de automação iniciado com sucesso.")
+            except Exception as e:
+                print(f"Erro ao iniciar o processo de automação: {e}")
+                process.terminate()
+        else:
+            self.show_message_error("Erro: tipo de cadastro não encontrado no nome do arquivo.")
+
 class ConfigDialog(QDialog):
     
     config_saved = pyqtSignal()
@@ -734,14 +968,11 @@ class ConfigDialog(QDialog):
         self.setLayout(main_layout)
      
     def mousePressEventHandler(self, event):
-        # Exibir o combobox e também iniciar o key listener
         self.mostrar_combobox(event)
     
     def mostrar_combobox(self, event):
-        # Obter o tamanho sugerido do QLineEdit
         line_edit_size = self.input_field_tecla.sizeHint()
         
-        # Obter a posição do QLineEdit relativa à janela de configurações
         line_edit_pos = self.input_field_tecla.mapTo(self, QPoint(0, 0))
         
         # Definir a posição e largura do combobox próximo ao QLineEdit dentro da janela de configurações
@@ -816,7 +1047,7 @@ class ConfigDialog(QDialog):
                 
                 
         except FileNotFoundError:
-            pass  # Se o arquivo não existir, ignora o erro
+            pass
 
     def get_origin_folder(self):
         return self.input_field_pasta.text()
@@ -872,7 +1103,7 @@ class Logger(QObject):
 
     def log_message(self, message):
         self.new_log_message.emit(message)
-        print(message)  # Também imprime no console, se necessário   
+        print(message)
         
 if __name__ == "__main__":
     app = QApplication(sys.argv)
